@@ -1,0 +1,426 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'VPC'
+
+Parameters:
+  KeyPairName:
+    Type: String
+    Description: Nombre de la llavr para acceso SSH
+
+Resources:
+#VPC
+  # Creación de la VPC
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: VPC_iC7
+
+#Internet Gateway
+  # Creación del Internet Gateway 
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: InternetG
+
+  # Adjuntar el Internet Gateway a la VPC
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+#Creacion subnets 
+  # Definición de las subredes públicas
+  PublicS1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: PublicS1-us-east-1a
+
+  PublicS2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      MapPublicIpOnLaunch: true
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: PublicS2-us-east-1b
+
+  # Definición de las subredes privadas
+  PrivateS1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: us-east-1a
+      Tags:
+        - Key: Name
+          Value: PrivateS1-us-east-1a
+
+  PrivateS2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: us-east-1b
+      Tags:
+        - Key: Name
+          Value: PrivateS2-us-east-1b
+
+#Route Tables
+  #Privadas
+    # Tabla de rutas para las subredes privadas 
+  RouteTPrivate:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteT_Private
+
+  #Publicas
+    # Tabla de rutas para las subredes públicas 
+  RouteTPublic:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: RouteT_Public
+
+    # Ruta hacia el Internet Gateway
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: AttachGateway
+    Properties:
+      RouteTableId: !Ref RouteTPublic
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  # Asociaciones de las subredes con sus respectivas tablas de rutas
+
+    #Publicas
+  PublicSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicS1
+      RouteTableId: !Ref RouteTPublic
+
+  PublicSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicS2
+      RouteTableId: !Ref RouteTPublic
+      
+    #Privadas
+  PrivateSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateS1
+      RouteTableId: !Ref RouteTPrivate
+
+  PrivateSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateS2
+      RouteTableId: !Ref RouteTPrivate
+
+#Network ACL
+  # Creación de Network ACL
+  NetworkACL:
+    Type: AWS::EC2::NetworkAcl
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: NetworkACLVPC_ic7
+
+  # Asociaciones de Network ACL con todas las subredes de la VPC
+    #Publicas
+  NetworkACLAssociationPublicS1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PublicS1
+      NetworkAclId: !Ref NetworkACL
+
+  NetworkACLAssociationPublicS2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PublicS2
+      NetworkAclId: !Ref NetworkACL
+    #Privadas
+  NetworkACLAssociationPrivateS1:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PrivateS1
+      NetworkAclId: !Ref NetworkACL
+
+  NetworkACLAssociationPrivateS2:
+    Type: AWS::EC2::SubnetNetworkAclAssociation
+    Properties:
+      SubnetId: !Ref PrivateS2
+      NetworkAclId: !Ref NetworkACL
+
+  # Reglas de entrada NACL
+  InboundRule1:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 100
+      Protocol: -1  
+      RuleAction: allow
+      Egress: false  
+      CidrBlock: 0.0.0.0/0
+ 
+  # Reglas de salida NACL
+  
+  OutboundRule4:
+    Type: AWS::EC2::NetworkAclEntry
+    Properties:
+      NetworkAclId: !Ref NetworkACL
+      RuleNumber: 100
+      Protocol: -1  
+      RuleAction: allow
+      Egress: true  
+      CidrBlock: 0.0.0.0/0
+
+#Creacion de Base de datos Aurora DB-MySql Serverless
+
+ # Grupo de seguridad Aurora
+  AuroraSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Aurora Security Group
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3306
+          ToPort: 3306
+          SourceSecurityGroupId: !Ref EC2SecurityGroup
+      Tags:
+        - Key: Name
+          Value: AuroraDB_SG
+
+  # Subnet Group para Aurora
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Subnets privadas para Aurora
+      SubnetIds:
+        - !Ref PrivateS1
+        - !Ref PrivateS2
+
+  # Aurora DB Cluster
+  AuroraDBCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      Engine: aurora-mysql
+      EngineMode: provisioned
+      EngineVersion: '8.0.mysql_aurora.3.04.0'
+      DBClusterIdentifier: aurora-serverless-cluster
+      MasterUsername: icloud7
+      MasterUserPassword: icloud7password
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref AuroraSecurityGroup
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 2
+        MaxCapacity: 4
+      BackupRetentionPeriod: 7
+      StorageEncrypted: true
+      DeletionProtection: false
+      Tags:
+        - Key: Name
+          Value: Aurora_Cluster
+
+  AuroraDBInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref AuroraDBCluster
+      DBInstanceIdentifier: aurora-serverless-instance
+      DBInstanceClass: db.serverless
+      Engine: aurora-mysql
+      PubliclyAccessible: false
+      Tags:
+        - Key: Name
+          Value: Aurora_Instance
+
+
+#Creacion de instancia
+
+  # Grupo de seguridad para la EC2
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Security group para EC2"
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: EC2_SG
+
+  # Elastic IP para la EC2
+  EC2EIP:
+    Type: AWS::EC2::EIP
+    Properties:
+      Domain: vpc
+
+  # Network Interface para asociar la EIP
+  EC2ENI:
+    Type: AWS::EC2::NetworkInterface
+    Properties:
+      SubnetId: !Ref PublicS1
+      GroupSet:
+        - !Ref EC2SecurityGroup
+      Description: Network interface for EC2
+      PrivateIpAddress: 10.0.1.10
+      Tags:
+        - Key: Name
+          Value: EC2_ENI
+
+  # Asociación EIP a la ENI
+  EC2EIPAssociation:
+    Type: AWS::EC2::EIPAssociation
+    Properties:
+      AllocationId: !GetAtt EC2EIP.AllocationId
+      NetworkInterfaceId: !Ref EC2ENI
+
+  # EC2 Bastion Host
+  EC2Host:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: t3.micro
+      KeyName: !Ref KeyPairName
+      ImageId: ami-0c02fb55956c7d316 
+      NetworkInterfaces: 
+        - DeviceIndex: 0
+          NetworkInterfaceId: !Ref EC2ENI
+      Tags:
+        - Key: Name
+          Value: EC2_Bastion
+
+#Configuracion de DMS Serverless para replicacion
+
+  # IAM Role para DMS
+  DMSVpcRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dms-vpc-role
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ""
+            Effect: Allow
+            Principal:
+              Service: dms.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: CustomDMSPermissions
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dms:Describe*
+                  - dms:Create*
+                  - dms:Delete*
+                  - dms:Modify*
+                  - dms:Start*
+                  - dms:Stop*
+                Resource: "*"
+              - Effect: Allow
+                Action:
+                  - ec2:CreateNetworkInterface
+                  - ec2:DeleteNetworkInterface
+                  - ec2:DescribeAvailabilityZones
+                  - ec2:DescribeDhcpOptions
+                  - ec2:DescribeInternetGateways
+                  - ec2:DescribeNetworkInterfaces
+                  - ec2:DescribeSecurityGroups
+                  - ec2:DescribeSubnets
+                  - ec2:DescribeVpcs
+                  - ec2:ModifyNetworkInterfaceAttribute
+              
+                Resource: "*"
+      Tags:
+        - Key: Name
+          Value: dms-vpc-role
+
+# Endpoints de DMS
+  DMSSourceEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      EndpointIdentifier: DMS-Source
+      EndpointType: source
+      EngineName: mysql
+      ServerName: Source_DB
+      Port: 3306
+      DatabaseName: sourcedb
+      Username: icloud7
+      Password: icloud7password
+
+  DMSTargetEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      EndpointIdentifier: DMS-Target
+      EndpointType: target
+      EngineName: mysql
+      ServerName: !GetAtt AuroraDBInstance.Endpoint.Address
+      Port: 3306
+      DatabaseName: targetdb
+      Username: icloud7
+      Password: icloud7password
+      
+
+# Subnet Group para DMS
+  DMSSubnetGroup:
+    Type: AWS::DMS::ReplicationSubnetGroup
+    Properties:
+      ReplicationSubnetGroupIdentifier: dms-subnet-group
+      ReplicationSubnetGroupDescription: Subnet group for DMS
+      SubnetIds:
+        - !Ref PrivateS1
+        - !Ref PrivateS2
+
+# DMS Serverless Replication Config
+  DMSReplication:
+    Type: AWS::DMS::ReplicationConfig
+    Properties:
+      ReplicationConfigIdentifier: aurora-replication-config
+      ReplicationType: full-load
+      SourceEndpointArn: !Ref DMSSourceEndpoint
+      TargetEndpointArn: !Ref DMSTargetEndpoint
+      ComputeConfig:
+        MaxCapacityUnits: 2
+        MinCapacityUnits: 1
+        ReplicationSubnetGroupId: !Ref DMSSubnetGroup
+        VpcSecurityGroupIds:
+          - !Ref AuroraSecurityGroup
+      TableMappings:
+        rules:
+          - rule-type: selection
+            rule-id: "1"
+            rule-name: "1"
+            object-locator:
+              schema-name: "%"
+              table-name: "%"
+            rule-action: include
+
+  
