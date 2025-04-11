@@ -5,6 +5,27 @@ Parameters:
   KeyPairName:
     Type: String
     Description: Nombre de la llavr para acceso SSH
+  
+  Public1SubnetAZ:
+    Type: String
+    Description: Zona de disponibilidad para la Subnet pública 1
+
+  Public2SubnetAZ:
+    Type: String
+    Description: Zona de disponibilidad para la Subnet pública 2
+  
+  Private1SubnetAZ:
+    Type: String
+    Description: Zona de disponibilidad para la Subnet privada 1
+
+  Private2SubnetAZ:
+    Type: String
+    Description: Zona de disponibilidad para la Subnet privada 2
+  
+  EC2AmiId:
+    Type: AWS::EC2::Image::Id
+    Description: ID de la AMI para la instancia EC2 
+
 
 Resources:
 #VPC
@@ -43,10 +64,10 @@ Resources:
       VpcId: !Ref VPC
       CidrBlock: 10.0.1.0/24
       MapPublicIpOnLaunch: true
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: !Ref Public1SubnetAZ
       Tags:
         - Key: Name
-          Value: PublicS1-us-east-1a
+          Value: !Sub PublicS1-${Public1SubnetAZ}
 
   PublicS2:
     Type: AWS::EC2::Subnet
@@ -54,10 +75,10 @@ Resources:
       VpcId: !Ref VPC
       CidrBlock: 10.0.2.0/24
       MapPublicIpOnLaunch: true
-      AvailabilityZone: us-east-1b
+      AvailabilityZone: !Ref Public2SubnetAZ
       Tags:
         - Key: Name
-          Value: PublicS2-us-east-1b
+          Value: !Sub PublicS2-${Public2SubnetAZ}
 
   # Definición de las subredes privadas
   PrivateS1:
@@ -65,20 +86,20 @@ Resources:
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.3.0/24
-      AvailabilityZone: us-east-1a
+      AvailabilityZone: !Ref Private1SubnetAZ
       Tags:
         - Key: Name
-          Value: PrivateS1-us-east-1a
+          Value: !Sub PrivateS1-${Private1SubnetAZ}
 
   PrivateS2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref VPC
       CidrBlock: 10.0.4.0/24
-      AvailabilityZone: us-east-1b
+      AvailabilityZone: !Ref Private2SubnetAZ
       Tags:
         - Key: Name
-          Value: PrivateS2-us-east-1b
+          Value: !Sub PrivateS2-${Private2SubnetAZ}
 
 #Route Tables
   #Privadas
@@ -308,13 +329,26 @@ Resources:
     Properties:
       InstanceType: t3.micro
       KeyName: !Ref KeyPairName
-      ImageId: ami-0c02fb55956c7d316 
+      ImageId: !Ref EC2AmiId 
       NetworkInterfaces: 
         - DeviceIndex: 0
           NetworkInterfaceId: !Ref EC2ENI
       Tags:
         - Key: Name
           Value: EC2_Bastion
+      UserData:
+        Fn::Base64: |
+          #!/bin/bash
+
+          #Instalar MySQL
+
+          sudo wget https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm
+          sudo dnf install mysql80-community-release-el9-1.noarch.rpm -y
+          sudo rpm --import https://repo.mysql.com/RPM-GPG-KEY-mysql-2023 
+          sudo dnf install mysql-community-server -y 
+          sudo systemctl start mysqld
+          sudo systemctl enable mysqld         
+
 
 #Configuracion de DMS Serverless para replicacion
 
